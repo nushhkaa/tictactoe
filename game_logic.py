@@ -1,28 +1,5 @@
-"""Core game logic for tic-tac-toe."""
-
 from itertools import cycle
-from typing import NamedTuple
-
-
-class Player(NamedTuple):
-    label: str
-    color: str
-
-
-class Move(NamedTuple):
-    row: int
-    col: int
-    label: str = ""
-
-
-BOARD_SIZE = 3
-DEFAULT_PLAYERS = (
-    Player(label="X", color="blue"),
-    Player(label="O", color="green"),
-)
-"""Core game logic for tic-tac-toe."""
-
-from itertools import cycle
+from math import inf
 from typing import NamedTuple
 
 
@@ -77,14 +54,9 @@ class TicTacToeGame:
         return rows + columns + [first_diagonal, second_diagonal]
 
     def get_board_labels(self):
-        """Return the board as labels only: '', 'X', or 'O'."""
-        return [
-            [move.label for move in row]
-            for row in self._current_moves
-        ]
+        return [[move.label for move in row] for row in self._current_moves]
 
     def get_available_positions(self):
-        """Return available positions as a list of (row, col)."""
         return [
             (move.row, move.col)
             for row in self._current_moves
@@ -93,18 +65,15 @@ class TicTacToeGame:
         ]
 
     def toggle_player(self):
-        """Return a toggled player."""
         self.current_player = next(self._players)
 
     def is_valid_move(self, move):
-        """Return True if move is valid, and False otherwise."""
         row, col = move.row, move.col
         move_was_not_played = self._current_moves[row][col].label == ""
         no_winner = not self._has_winner
         return no_winner and move_was_not_played
 
     def process_move(self, move):
-        """Process the current move and check if it's a win."""
         row, col = move.row, move.col
         self._current_moves[row][col] = move
         for combo in self._winning_combos:
@@ -115,50 +84,82 @@ class TicTacToeGame:
                 self.winner_combo = combo
                 break
 
+    def _get_winner_from_labels(self, board_labels):
+        for combo in self._winning_combos:
+            labels_in_combo = {board_labels[row][col] for row, col in combo}
+            if len(labels_in_combo) == 1 and "" not in labels_in_combo:
+                return next(iter(labels_in_combo))
+        return None
+
+    def _get_available_positions_from_labels(self, board_labels):
+        return [
+            (row, col)
+            for row in range(self.board_size)
+            for col in range(self.board_size)
+            if board_labels[row][col] == ""
+        ]
+
     def minimax(self, board_labels, is_maximizing):
-        """Placeholder for your minimax implementation.
+        """Compute best move score and coordinates for a simulated turn.
 
         Args:
-            board_labels: 2D list board state from get_board_labels().
-            is_maximizing: True for AI turn, False for human turn.
+            board_labels: 2D list of board labels for current simulation node.
+            is_maximizing: `True` when AI turn is being evaluated, else `False`.
 
         Returns:
-            Expected to return one of:
-            - (score, (row, col))
-            - (row, col)
+            - Tuple `(score, (row, col))` for best available move in this node.
+            - Score values: `1` for AI-winning branch, `0` for draw, `-1` for human-winning branch.
+
+        Used by:
+            - `get_ai_move()` for real AI choice.
+            - Recursively calls itself to explore the full game tree.
         """
-        _ = board_labels
-        _ = is_maximizing
-        return self.get_available_positions()[0]
+        winner = self._get_winner_from_labels(board_labels)
+        if winner == self.ai_label:
+            return 1, (-1, -1)
+        if winner == self.human_label:
+            return -1, (-1, -1)
+
+        available_positions = self._get_available_positions_from_labels(board_labels)
+        if not available_positions:
+            return 0, (-1, -1)
+
+        if is_maximizing:
+            best_score = -inf
+            best_move = (-1, -1)
+            for row, col in available_positions:
+                board_labels[row][col] = self.ai_label
+                score, _ = self.minimax(board_labels, False)
+                board_labels[row][col] = ""
+                if score > best_score:
+                    best_score = score
+                    best_move = (row, col)
+            return best_score, best_move
+
+        best_score = inf
+        best_move = (-1, -1)
+        for row, col in available_positions:
+            board_labels[row][col] = self.human_label
+            score, _ = self.minimax(board_labels, True)
+            board_labels[row][col] = ""
+            if score < best_score:
+                best_score = score
+                best_move = (row, col)
+        return best_score, best_move
 
     def get_ai_move(self):
-        """Get AI move using minimax placeholder and normalize output."""
-        result = self.minimax(self.get_board_labels(), True)
-        if (
-            isinstance(result, tuple)
-            and len(result) == 2
-            and isinstance(result[1], tuple)
-        ):
-            row, col = result[1]
-            return Move(row, col, self.ai_label)
-
-        row, col = result
+        _score, (row, col) = self.minimax(self.get_board_labels(), True)
         return Move(row, col, self.ai_label)
 
     def has_winner(self):
-        """Return True if the game has a winner, and False otherwise."""
         return self._has_winner
 
     def is_tied(self):
-        """Return True if the game is tied, and False otherwise."""
         no_winner = not self._has_winner
-        played_moves = (
-            move.label for row in self._current_moves for move in row
-        )
+        played_moves = (move.label for row in self._current_moves for move in row)
         return no_winner and all(played_moves)
 
     def reset_game(self):
-        """Reset the game state to play again."""
         for row, row_content in enumerate(self._current_moves):
             for col, _ in enumerate(row_content):
                 row_content[col] = Move(row, col)
